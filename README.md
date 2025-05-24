@@ -42,15 +42,30 @@ After that, these DataFrames are combined into a single dataset using pd.concat(
 ```python
 uber = pd.concat([df_apr14, df_may14, df_jun14, df_jul14, df_aug14, df_sep14], ignore_index=True)
 ```
+```python
+uber.info()
+```
+<center>
+      <img src="png/info.png"/>
+  </center>
+  
 ### 2. Checking null values:
 ```python
 uber.isnull().sum()
 ```
+<center>
+      <img src="png/isnull.png"/>
+  </center>
+  
 In this case, a check of the dataset shows that there are no missing values. As a result, there's no need to perform any additional steps like replacing or removing data.
 ### 3. Checking duplicated values:
 ```python
 uber.duplicated().sum()
 ```
+<center>
+      <img src="png/dup.png"/>
+  </center>
+  
 The results show that there are 82,581 duplicate rows in the dataset. Since these duplicates don't add any value to the analysis, the drop_duplicates(inplace=True) method is used to remove them directly from the DataFrame.
 ```python
 uber.drop_duplicates(inplace = True)
@@ -72,10 +87,18 @@ uber['minute'] = uber['Date_time'].dt.minute
 ```python
 uber.info()
 ```
+<center>
+      <img src="png/info2.png"/>
+  </center>
+
 ```python
 print(uber['Date_time'].min())
 print(uber['Date_time'].max())
 ```
+<center>
+      <img src="png/timeminmax.png"/>
+  </center>
+  
 The collected data covers trips from April 1, 2014, to September 30, 2014, totaling 4,451,746 records. Descriptive statistics have been calculated for the time-related column (Date_time), location coordinates (Lat, Lon), and time components such as day (Day), hour (Hour), and minute (Minute).
 
 ## II. EDA
@@ -95,6 +118,10 @@ for i, month in enumerate(uber['month'].unique()):
 plt.tight_layout()
 plt.show()
 ```
+<center>
+      <img src="png/trips.hours.png"/>
+  </center>
+  
 - **Peak Hours**: Trips increase from early morning, peaking between **3–6 PM**, likely due to post-work or school travel.
 - **Secondary Peaks**: Smaller peaks occur around **7–9 AM** and **12–1 PM**, reflecting morning commutes and lunch breaks.
 - **Late Night Drop**: After **11 PM**, trip volume drops sharply.
@@ -115,6 +142,10 @@ plt.ylabel("Total Number of Trips", fontsize=14)
 # Show the plot
 plt.show()
 ```
+<center>
+      <img src="png/trips.weekday.png"/>
+  </center>
+  
 - **Midweek (Thursday, Friday)** sees the **highest** number of trips, exceeding 700,000 per day, likely due to increased travel for work, meetings, and evening activities.
 - **Weekends** (Saturday, Sunday) show a **decline**, with **Sunday** having the **lowest** trips (~480,000), possibly because more people stay home or use personal vehicles.
 
@@ -133,6 +164,14 @@ for i, month in enumerate(uber['month'].unique()):
 plt.tight_layout()
 plt.show()
 ```
+<center>
+      <img src="png/trips.daymonth.png"/>
+  </center>
+
+<center>
+      <img src="png/trips.daymonth1.png"/>
+  </center>
+  
 - **Demand spikes every 6–7 days**, likely aligning with **Fridays through Sundays**.
 - **August and September** are the **busiest months**, possibly due to **seasonal effects** (e.g., end of summer, return to school, or favorable weather).
 - **One day is missing in April, June, and September**, likely due to **data entry errors or missing records**.
@@ -147,6 +186,10 @@ plt.xlabel("Day of the Week")
 plt.ylabel("Hour of the Day")
 plt.show()
 ```
+<center>
+      <img src="png/hour.weekday.png"/>
+  </center>
+  
 - The **busiest period is from 10 AM to 7 PM**, capturing the bulk of daily demand.
 - The **median trip time stays consistent (~3–4 PM**) across all days, indicating that **Uber usage peaks in the afternoon**. Trips are distributed across the full 24 hours, showing **nearly continuous servic**e.
 - **Weekends** (Saturday & Sunday) show **wider variability**, likely due to more **late-night trips** related to social events, while **Weekdays** (Monday to Friday) have **similar, stable patterns** with less variability, reflecting **commuting routines**.
@@ -157,6 +200,10 @@ plt.show()
 #Total driving hours per day in the month
 uber.groupby('day')['hour'].count()
 ```
+<center>
+      <img src="png/hour.daymonth.png"/>
+  </center>
+  
 ```python
 # Analyze total driving hours by day of the month
 day_hours = uber.groupby('day')['hour'].count().reset_index(name='Total Driving Hours')
@@ -179,6 +226,10 @@ plt.ylabel("Total Driving Hours", fontsize=14)
 # Show the plot
 plt.show()
 ```
+<center>
+      <img src="png/hour.daymonth1.png"/>
+  </center>
+  
 - Driving hours are **relatively stable** throughout the month, with **low activity in the first few days**, especially on the 1st.
 - The **30th** often shows a **noticeable spike** in total driving hours, possibly due to end-of-month activities like salary payments or shopping.
 - The **31st** sees a **sharp drop** in total driving hours, likely because not all months have 31 days.
@@ -188,6 +239,10 @@ plt.show()
 #Analyzes which month has the highest total number of trip hours
 uber.groupby('month')['hour'].count()
 ```
+<center>
+      <img src="png/hour.month.png"/>
+  </center>
+  
 ```python
 monthly_trips = uber.groupby('month')['hour'].count().reset_index(name='Total Trip Hours')
 colors = ['skyblue', 'salmon', 'lightgreen', 'gold', 'orchid', 'lightcoral']
@@ -199,6 +254,10 @@ plt.xlabel('Month')
 plt.title("Total Trip Hours by Month", fontsize=16)
 plt.show()
 ```
+<center>
+      <img src="pnghour.month1.png"/>
+  </center>
+  
 - Total driving hours **steadily rise** from **April to September**, **peaking** in **September** with over 1 million hours. The most significant growth occurs between **June and September**, likely due to the **summer tourism peak** in New York, attracting many visitors and boosting Uber demand.
 - Warm weather and outdoor activities encourage more travel. **August and September** also see **increased** demand as students and workers **return from summer break**s, especially in **early September**.
 
@@ -225,6 +284,10 @@ plt.ylabel("Latitude", fontsize=14)
 # Show the plot
 plt.show()
 ```
+<center>
+      <img src="png/lat.png"/>
+  </center>
+  
 - **Weekday vs Weekend Patterns**: **Monday to Friday** show **higher average latitude**s, indicating that pickups tend to cluster more **northward** (likely in Manhattan). **Saturday and Sunday** have **lower average latitude**s, suggesting more activity **further south** or outside central business areas.
 - **Morning Spike (7–9 AM)**: Clear uptick in latitude on **weekdays**, indicating work-related commuting patterns into more northern (business) areas.
 - **Evening Decline (after 6 PM)**: Gradual decrease in latitude, implying dispersal from business centers.
@@ -235,11 +298,19 @@ plt.show()
 ```python
 uber['Base'].nunique()
 ```
+<center>
+      <img src="png/unique.png"/>
+  </center>
+  
 ```python
 #analyzes which locations (bases) have the highest total number of trips by hour
 base = uber.groupby(['Base','hour'])['Date_time'].count().reset_index()
 base
 ```
+<center>
+      <img src="png/base.png"/>
+  </center>
+  
 ```python
 fig4=px.scatter(base,
             x='hour',
@@ -255,6 +326,10 @@ fig4.update_yaxes(title_text="Total Trips")
 
 fig4.show()
 ```
+<center>
+      <img src="png/base1.png"/>
+  </center>
+  
 - Total trips are **lowest** between **2 AM and 5 AM**, reflecting minimal overnight demand.
 - Trips begin to **rise steadily after 6 AM**, aligning with the morning commute.
 - The **highest** trip volumes occur between **3 PM and 7 PM**, likely due to evening commute and after-work activities.
@@ -271,6 +346,10 @@ base1=fo.Map()
 HeatMap(Demand,zoom=20,radius=15).add_to(base1)
 base1
 ```
+<center>
+      <img src="png/geo.png"/>
+  </center>
+  
 - **Manhattan** is the main **hotspot** for taxi demand due to its **high population density, business centers, tourism, and entertainment**.
 - Major routes to **Long Island** and **New Jersey** show **high trip density**, reflecting strong **commuter traffic** between the city and suburbs.
 - Other notable hotspots include areas around **Newark Airport**, and suburban zones like **Stamford** and **New Brunswick**, indicating **significant regional travel**.
@@ -295,6 +374,10 @@ plt.ylabel('Weekday')
 plt.title('Heatmap of Uber Trips by Hour and Day of Week')
 plt.show()
 ```
+<center>
+      <img src="png/hd.png"/>
+  </center>
+  
 ```python
 #By Hour and Day of the month
 heatmap('day', 'hour')
@@ -303,6 +386,10 @@ plt.ylabel('Day of Month')
 plt.title('Heatmap of Uber Trips by Day and Hour')
 plt.show()
 ```
+<center>
+      <img src="png/dh.png"/>
+  </center>
+  
 ```python
 #by month and day of the month
 heatmap('month', 'day')
@@ -311,6 +398,10 @@ plt.ylabel('Month')
 plt.title('Heatmap of Uber Trips by Month and Day of Month')
 plt.show()
 ```
+<center>
+      <img src="png/mm.png"/>
+  </center>
+  
 ```python
 #by month and weekday 
 heatmap('month', 'weekday')
@@ -319,6 +410,10 @@ plt.ylabel('Month')
 plt.title('Heatmap of Uber Trips by Month and Day of Week')
 plt.show()
 ```
+<center>
+      <img src="png/md.png"/>
+  </center>
+  
 📝 Key observations
 - The peak demand hour 17:00.
 - The main customer category are workers.
