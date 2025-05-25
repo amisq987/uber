@@ -1,8 +1,8 @@
 # 🚗 Uber
 ## 📌 Project objective
-This project looks at Uber ride data from New York City between April and September 2014 to understand when and where people are most likely to request rides and other deeper insights. By developing and evaluating models like XGBoost, Random Forest, and LSTM to predict future demand, the goal is to help Uber prepare ahead—putting drivers in the right places, reducing wait times, planning promotions, and making better decisions to improve both service and efficiency.
+This project looks at Uber ride data from New York City between April and September 2014 to understand when and where people are most likely to request rides and other deeper insights. By developing and evaluating models like XGBoost, Random Forest, and Gradient Boosted Tree Regressor to predict future demand, the goal is to help Uber prepare ahead—putting drivers in the right places, reducing wait times, planning promotions, and making better decisions to improve both service and efficiency.
 ## 🛠 Technologies used
-Python (Pandas, NumPy, Matplotlib, Seaborn, XGBoost, Random Forest, LSTM, MAPE) by using GoogleColab
+Python (Pandas, NumPy, Matplotlib, Seaborn, XGBoost, Random Forest, Gradient Boosted Tree Regressor, MAPE) by using GoogleColab
 ## 🏢 About the company
 Uber Technologies, Inc., founded in 2009 and headquartered in San Francisco, California, is a leading technology company that revolutionized urban transportation with its ride-sharing platform. The company’s mission is to make transportation as reliable as running water, everywhere, for everyone. Uber’s innovative app connects millions of riders with drivers in over 70 countries, offering a convenient alternative to traditional taxis. 
 ## 📂 Dataset
@@ -423,6 +423,378 @@ plt.show()
 - We should investigate why people don't use uber on Mondays as much as they do on other working days.
 
 ## III. Machine learning
+
+### 1. Importing the necessary libraries + useful functions
+The first step is to import all necessary libraries and include useful functions to make the code below more readable.
+```python
+import warnings
+warnings.filterwarnings("ignore")
+
+import xgboost as xgb
+import matplotlib.pyplot as plt
+from sklearn.model_selection import KFold
+from xgboost import plot_importance, plot_tree
+from sklearn.model_selection import train_test_split
+from statsmodels.tsa.seasonal import seasonal_decompose
+from sklearn.metrics import mean_absolute_percentage_error
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.model_selection import GridSearchCV, RandomizedSearchCV, TimeSeriesSplit
+```
+Thanks to the combination of these tools, the model training process becomes more efficient, ensuring that the model does not suffer from overfitting or get affected by outliers in the data. At the same time, optimization techniques help identify the most suitable model for the forecasting problem.
+
+Developing a time series forecasting model involves more than just choosing the right algorithm—data preprocessing, visualization, error evaluation, and feature engineering are equally crucial. The following code provides a comprehensive set of functions to support this end-to-end process.
+```python
+# Time series decomposition
+def PlotDecomposition(result):
+    plt.figure(figsize=(22,18))
+    plt.subplot(4,1,1)
+    plt.plot(result.observed,label='Observed',lw=1)
+    plt.legend(loc='upper left')
+    plt.subplot(4,1,2)
+    plt.plot(result.trend,label='Trend',lw=1)
+    plt.legend(loc='upper left')
+    plt.subplot(4, 1, 3)
+    plt.plot(result.seasonal, label='Seasonality',lw=1)
+    plt.legend(loc='upper left')
+    plt.subplot(4, 1, 4)
+    plt.plot(result.resid, label='Residuals',lw=1)
+    plt.legend(loc='upper left')
+    plt.show()
+
+# Evaluation of forecasting errors
+def CalculateError(pred,sales):
+  percentual_errors = []
+  for A_i, B_i in zip(sales, pred):
+    percentual_error = abs((A_i - B_i) / B_i)
+    percentual_errors.append(percentual_error)
+  return sum(percentual_errors) / len(percentual_errors)
+
+# Visualization of forecasting results
+def PlotPredictions(plots,title):
+    plt.figure(figsize=(18, 8))
+    for plot in plots:
+        plt.plot(plot[0], plot[1], label=plot[2], linestyle=plot[3], color=plot[4],lw=1)
+    plt.xlabel('Date')
+    plt.ylabel("Trips")
+    plt.title(title)
+    plt.legend()
+    plt.xticks(rotation=30, ha='right')
+    plt.show()
+
+#Preparing data for forecasting models
+def create_lagged_features(data, window_size):
+    X, y = [], []
+    for i in range(len(data) - window_size):
+        X.append(data[i:i+window_size])
+        y.append(data[i+window_size])
+    return np.array(X), np.array(y)
+```
+- **Time series decomposition**
+Before building a forecasting model, it’s important to break down the time series into trend, seasonality, and residuals using PlotDecomposition(result). This helps you see if the data has clear patterns the model can learn from. If the trend or seasonality is strong and the residuals look random, your model is likely on the right track. But if the residuals show patterns, it might be time to tweak the model or clean the data.
+- **Evaluation of forecasting errors**
+After building a model, CalculateError(pred_sales) uses MAPE (Mean Absolute Percentage Error), which shows the average prediction error as a percentage to measure accuracy. A low MAPE means good predictions; a high one suggests the model needs improvement. It's a quick way to gauge forecast reliability.
+-**Visualization of forecasting results**
+Visualizing forecasts is key to spotting differences between actual and predicted data. It helps identify errors and check if the model follows the trend. If predictions are too noisy, smoothing or data adjustments might be needed. Charts also make it easier for others to understand and make decisions
+-**Preparing data for forecasting models**
+A good forecasting model depends not just on the algorithm but also on how the data is prepared. The function create_lagged_features(data, window_size) creates lagged features, letting the model learn from past values to predict the future. Choosing the right window size helps capture trends and cycles, improving accuracy. Lagged features also transform time series data into a format suitable for machine learning models like Linear Regression, Random Forests, or Neural Networks. Without this step, models might miss important time dependencies and give poor forecasts.
+
+### 2. Preparing the data
+As you will see, one of the key aspects of this (particluarly important) step is resampling it on an hourly basis. Originally, the data isn't time series prediction ready. Once we finish preparing the data, we will be able to begin training models.
+```python
+# Now make sure the date column is set to datetime, sorted and with an adequate name
+uber2014['Date_time'] = pd.to_datetime(uber2014['Date_time'], format='%Y-%m-%d %H:%M:%S')
+uber2014 = uber2014.sort_values(by='Date_time')
+uber2014 = uber2014.rename(columns={'Date_time':'Date'})
+uber2014.set_index('Date',inplace=True)
+```
+```python
+uber2014.head(5)
+```
+<center>
+      <img src="png/head3.png"/>
+  </center>
+  
+```python
+# Group by hour and count occurrences of 'Base'
+hourly_counts = uber2014['Base'].resample('h').count()
+# Convert the series to a dataframe
+uber2014 = hourly_counts.reset_index()
+# Rename columns for clarity
+uber2014.columns = ['Date', 'Count']
+uber2014.set_index('Date',inplace=True)
+```
+```python
+uber2014.head(5)
+```
+<center>
+      <img src="png/head4.png"/>
+  </center>
+
+### 3. Choosing the optimal train / test sets
+In order to choose the correct train / test sets, we need to first visualize the series, then do a seasonal decompose if the trend can inform us of a suggested approach to that split
+```python
+# Let's plot the series
+plt.figure(figsize=(20, 8))
+plt.plot(uber2014['Count'],linewidth = 1, color='darkslateblue')
+plt.xticks(rotation=30,ha='right')
+plt.show()
+```
+<center>
+      <img src="png/totaltrips.days.png"/>
+  </center>
+  
+```python
+result=seasonal_decompose(uber2014['Count'],model='add', period=24*1)
+PlotDecomposition(result)
+```
+<center>
+      <img src="png/obs.trend.png"/>
+  </center>
+
+<center>
+      <img src="png/season.res.png"/>
+  </center>
+  
+The chart gives deeper insight into the data structure. The trend shows gradual growth in trips over time. Seasonality reveals repeating patterns like daily or weekly changes. Residuals represent noise, and if it’s high, the model may need extra preprocessing to clean the data before training.
+```python
+print(uber2014.index.min())
+print(uber2014.index.max())
+```
+<center>
+      <img src="png/timess.png"/>
+  </center>
+ 
+Choosing a proper split point for training and testing is crucial in time series forecasting. Unlike regular ML tasks, time series splits must ensure the model only learns from the past and predicts the future to avoid data leakage. In the code below, September 15, 2014 is used as the cutoff date.
+```
+cutoff_date = '2014-09-15 00:00:00'
+plt.figure(figsize=(20, 8))
+plt.plot(result.trend, linewidth = 1, color='gray')
+plt.axvline(x=pd.Timestamp(cutoff_date), color='red', linestyle='--', linewidth=1)
+plt.xticks(rotation=30, ha='right')
+plt.show()
+```
+<center>
+      <img src="png/cutoffdate.png"/>
+  </center>
+  
+As seen above, the trend stays relatively stable until around September 2014, and then increases to 4 more peaks. Leaving up to the first 2 peaks as train data and the remaining 2 as test would be sufficient. This is particularly important, because if we did the usual 80/20 split, we would likely encounter errors due to the said trend increase.
+
+```python
+uber2014_train = uber2014.loc[:cutoff_date]
+uber2014_test = uber2014.loc[cutoff_date:]
+```
+```python
+uber2014_test.rename(columns={'Count':'TEST SET'}).join(uber2014_train.rename(columns={'Count':'TRAINING SET'}), how='outer').plot(figsize=(15,5),title='Train / Test Sets', style='-',lw=1)
+```
+```python
+# Set the window size
+window_size = 24
+
+# Split data into training and test sets
+X_train, y_train = create_lagged_features(uber2014_train['Count'].values, window_size)
+test_data = np.concatenate([uber2014_train['Count'].values[-window_size:], uber2014_test['Count'].values])
+X_test, y_test = create_lagged_features(test_data, window_size)
+```
+```python
+seed = 12345
+```
+### 4. XGBoost
+XGBoost is one of the strongest ML algorithms available. However, it is usually prone to overfitting. We avoid it by doing Cross Validation and fine tuning the training process.
+```python
+tscv = TimeSeriesSplit(n_splits=5)
+
+xgb_param_grid = {
+    'n_estimators': [100, 200, 300],
+    'max_depth': [3, 6, 9],
+    'learning_rate': [0.01, 0.1, 0.3],
+    'subsample': [0.6, 0.8, 1.0],
+    'colsample_bytree': [0.6, 0.8, 1.0]
+}
+
+xgb_model = xgb.XGBRegressor(objective='reg:squarederror', random_state=seed)
+
+xgb_grid_search = GridSearchCV(
+    estimator=xgb_model,
+    param_grid=xgb_param_grid,
+    cv=tscv,
+    scoring='neg_mean_absolute_percentage_error',
+    n_jobs=-1,
+    verbose=1
+)
+xgb_grid_search.fit(X_train, y_train)
+print("Best XGBoost parameters:", xgb_grid_search.best_params_)
+```
+**Results: {'colsample_bytree': 1.0, 'learning_rate': 0.1, 'max_depth': 6, 'n_estimators': 300, 'subsample': 0.6}**
+This means the model performs best when:
+- Using 300 decision trees
+- Max depth is 6
+- Learning rate is 0.1
+- Using all features (colsample_bytree = 1.0)
+
+```python
+xgb_predictions = xgb_grid_search.best_estimator_.predict(X_test)
+
+PlotPredictions([
+    (uber2014_test.index, uber2014_test['Count'], 'Test', '-', 'darkslateblue'),
+    (uber2014_test.index, xgb_predictions, 'XGBoost Predictions', '--', 'red')
+], 'Uber 2014 Trips: XGBoost Predictions vs Test')
+
+xgb_mape = mean_absolute_percentage_error(uber2014_test['Count'], xgb_predictions)
+print(f"XGBoost MAPE:\t{xgb_mape:.2%}")
+```
+<center>
+      <img src="png/xgboost.png"/>
+  </center>
+  
+The model achieved an error of **8.37%**, indicating fairly good performance in the time series forecasting task.
+
+### 5. Random Forest
+Random Forests are less susceptible to overfitting. However, for time series tasks, this model has limitations. Random Forests don’t automatically handle the sequential nature of data, so careful preprocessing—like creating lagged features (as in part 3)—is needed. To optimize the model, Grid Search combined with Time Series Cross-Validation is used to find the best parameters and improve forecasting performance.
+```python
+rf_param_grid = {
+    'n_estimators': [100, 200, 300],
+    'max_depth': [10, 20, 30],
+    'min_samples_split': [2, 5, 10],
+    'min_samples_leaf': [1, 2, 4],
+    'max_features': [None, 'sqrt', 'log2']
+}
+
+rf_model = RandomForestRegressor(random_state=seed)
+
+rf_grid_search = GridSearchCV(
+    estimator=rf_model,
+    param_grid=rf_param_grid,
+    cv=tscv,
+    scoring='neg_mean_absolute_percentage_error',
+    n_jobs=-1,
+    verbose=1
+)
+rf_grid_search.fit(X_train, y_train)
+
+print("Best Random Forest parameters:", rf_grid_search.best_params_)
+```
+**Results: {max_depth': 30, 'max_features': None, 'min_samples_leaf': 1, 'min_samples_split': 2, 'n_estimators': 300}**
+This means the model performs best when:
+- Using 100 decision trees
+- Max depth is 30
+- Use all features (max_features=None)
+- Minimum 2 samples per leaf to reduce overfitting
+- Minimum 5 samples required to split a node
+  
+```python
+xgb_predictions = xgb_grid_search.best_estimator_.predict(X_test)
+
+PlotPredictions([
+    (uber2014_test.index, uber2014_test['Count'], 'Test', '-', 'darkslateblue'),
+    (uber2014_test.index, xgb_predictions, 'XGBoost Predictions', '--', 'red')
+], 'Uber 2014 Trips: XGBoost Predictions vs Test')
+
+xgb_mape = mean_absolute_percentage_error(uber2014_test['Count'], xgb_predictions)
+print(f"XGBoost MAPE:\t{xgb_mape:.2%}")
+```
+<center>
+      <img src="png/randomforest.png"/>
+  </center>
+  
+Random Forest’s MAPE (**9.61%**) is higher than XGBoost’s (**8.37%**), indicating that it may not perform as well as XGBoost for this task.
+
+### 6. Gradient Boosted Regression Tree
+```python
+gbr_param_grid = {
+    'n_estimators': [100, 200, 300],
+    'learning_rate': [0.01, 0.1],
+    'max_depth': [3, 4, 5],
+    'min_samples_split': [2, 5, 10],
+    'min_samples_leaf': [1, 2, 4],
+    'max_features': ['sqrt', 'log2']
+}
+
+gbr_model = GradientBoostingRegressor(random_state=seed)
+
+gbr_grid_search = GridSearchCV(estimator=gbr_model, param_grid=gbr_param_grid, cv=tscv, n_jobs=-1, scoring='neg_mean_absolute_percentage_error',verbose = 1)
+gbr_grid_search.fit(X_train, y_train)
+
+print("Best Random Forest parameters:", gbr_grid_search.best_params_)
+```
+**Results: {'learning_rate': 0.1, 'max_depth': 5, 'max_features': 'sqrt', 'min_samples_leaf': 2, 'min_samples_split': 2, 'n_estimators': 300}**
+This means the model performs best when:
+- Learning rate: 0.1
+- Using 300 decision trees
+- Max depth is 5
+- Max features: square root of total features ('sqrt')
+- Minimum samples per leaf: 2
+- Minimum samples to split a node: 2
+
+```python
+gbr_predictions = gbr_grid_search.best_estimator_.predict(X_test)
+
+PlotPredictions([
+    (uber2014_test.index,uber2014_test['Count'],'Test','-','gray'),
+    (uber2014_test.index,gbr_predictions,'GBRT Predictions','--','orange')],
+    'Uber 2014 Trips: GBRT Predictions vs Test')
+gbr_mape = mean_absolute_percentage_error(y_test, gbr_predictions)
+print(f'GBTR Percentage Error:\t{gbr_mape:.2%}')
+```
+<center>
+      <img src="png/GBRT.png"/>
+  </center>
+  
+The model achieved an error of **10.54%**, indicating relatively good performance in the time series forecasting task.
+
+### 7. Visualizing all models at once
+```python
+PlotPredictions([
+    (uber2014_test.index,uber2014_test['Count'],'Test','-','gray'),
+    (uber2014_test.index,xgb_predictions,'XGBoost Predictions','--','red'),
+    (uber2014_test.index,gbr_predictions,'GBRT Predictions','--','orange'),
+    (uber2014_test.index,rf_predictions,'Random Forest Predictions','--','green')],
+    'Uber 2014 Trips: All Models Predictions vs Test')
+```
+<center>
+      <img src="png/MODELS.png"/>
+  </center>
+  
+The above plot shows how all algorithms have actually being very close to predicting the test set. Visually, we can safely assume that using either algorithm could be a safe bet. 
+
+### 8. Ensemble
+Building the ensemble requires to understand how each algorithm has performed individually first. Then, decide how we can leverage each one's strenghts to our advantage.
+```python
+print(f'XGBoost MAPE:\t\t\t{xgb_mape:.2%}')
+print(f'Random Forest MAPE:\t\t{rf_mape:.2%}')
+print(f'GBTR Percentage Error:\t\t{gbr_mape:.2%}')
+```
+<center>
+      <img src="png/mape.png"/>
+  </center>
+  
+Convert MAPE scores to weights: Since MAPE is inversely related to model performance, we can use the reciprocal of MAPE as a starting point for determining the weights. Normalize these reciprocals to get the weights.
+```python
+# Calculate weights based on inverse MAPE (Mean Absolute Percentage Error)
+weights = np.array([1/xgb_mape, 1/rf_mape, 1/gbr_mape])
+weights = weights / weights.sum()  # Normalize weights so they sum to 1
+print(f"Weights: XGBoost={weights[0]:.3f}, Random Forest={weights[1]:.3f}, GBRT={weights[2]:.3f}")
+
+# Create ensemble predictions by combining XGBoost, Random Forest, and GBRT predictions weighted by their performance
+ensemble_predictions = (weights[0] * xgb_predictions +
+                        weights[1] * rf_predictions +
+                        weights[2] * gbr_predictions)
+
+# Plot the test data and the ensemble forecast for comparison
+PlotPredictions([
+    (uber2014_test.index, uber2014_test['Count'], 'Test Set', '-', 'gray'),
+    (uber2014_test.index, ensemble_predictions, 'Ensemble Model', '--', 'purple')
+], 'Uber 2014 Trip Forecast: Test Set vs Ensemble Model')
+
+# Calculate and print the MAPE of the ensemble model
+ensemble_mape = mean_absolute_percentage_error(uber2014_test['Count'], ensemble_predictions)
+print(f'Ensemble Model Percentage Error:\t{ensemble_mape:.2%}')
+```
+<center>
+      <img src="png/ensemble.png"/>
+  </center>
+  
+### 9. Insights and Conclusions from Training and Evaluation
+The training and evaluation of these models underscore the effectiveness of **XGBoost**, with its best-in-class MAPE of **8.37%**. The ensemble model, achieving a **MAPE** of **8.60%**, effectively combines the strengths of the individual models, resulting in robust and reliable predictions. These findings highlight the importance of considering temporal structures in time series data and lay a strong foundation for future predictive modeling efforts in similar applications.
 
 
 
